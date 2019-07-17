@@ -4,6 +4,7 @@ section .text
 bits 32
 screen_width: equ 320
 screen_height: equ 200
+extern _start
 
 start:
     ; Point the first entry of the level 4 page table to the first entry in the
@@ -56,7 +57,7 @@ start:
     mov ds, ax
     mov es, ax
 
-    jmp gdt64.code:long_mode_start
+    jmp gdt64.code:_start
 
     ; ------------
     ; Page table
