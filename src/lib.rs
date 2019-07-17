@@ -1,18 +1,19 @@
 #![no_std]
-#![no_main]
 
 use core::panic::PanicInfo;
 static HELLO: &[u8] = b"HelloWOWOWOWO World!";
+const VGA_BUFFER_ADDR: usize = 0xb8000; // VGA buffer address
+const SCREEN_WIDTH: usize = 320;
+const SCREEN_HEIGHT: usize = 200;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     clear_screen();
     apply_text_attr(0x3f); // Cyan background, white text
 
-	let vga_buffer = 0xb8000; // VGA buffer address
     for (i, &byte) in HELLO.iter().enumerate() {
         unsafe {
-            let addr = vga_buffer + (i * 2);
+            let addr = VGA_BUFFER_ADDR + (i * 2);
             *(addr as *mut u8) = byte;
         }
     }
@@ -27,11 +28,10 @@ fn panic(_info: &PanicInfo) -> ! {
 }
 
 fn clear_screen() {
-    let vga_buffer = 0xb8000; // VGA buffer address
-    for i in 0..200 {
-        for j in 0..320 {
+    for i in 0..SCREEN_WIDTH {
+        for j in 0..SCREEN_WIDTH {
             unsafe {
-                let addr = vga_buffer + (i * 320) + j;
+                let addr = VGA_BUFFER_ADDR + (i * SCREEN_WIDTH) + j;
                 if j % 2 == 0 {
                     *(addr as *mut u8) = 0x0;
                 }
@@ -41,11 +41,10 @@ fn clear_screen() {
 }
 
 fn apply_text_attr(text_attr: u8) {
-    let vga_buffer = 0xb8000; // VGA buffer address
-    for i in 0..200 {
-        for j in 0..320 {
+    for i in 0..SCREEN_WIDTH {
+        for j in 0..SCREEN_WIDTH {
             unsafe {
-                let addr = vga_buffer + (i * 320) + j;
+                let addr = VGA_BUFFER_ADDR + (i * SCREEN_WIDTH) + j;
                 if j % 2 != 0 {
                     // Set text attribute
                     *(addr as *mut u8) = text_attr;
