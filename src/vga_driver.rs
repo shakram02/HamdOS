@@ -32,14 +32,6 @@ impl VgaBuffer {
 
     pub fn print(&mut self, bytes: &[u8]) {
         for &byte in bytes.iter() {
-            // self.write_byte_to_buffer(byte);
-            // if self.col == SCREEN_WIDTH {
-            //     self.row += 1;
-            //     self.col = 0;
-            // } else {
-            //     self.col += 1;
-            // }
-
             if byte == LINE_FEED {
                 self.row += 1;
                 self.col = 0;
@@ -50,6 +42,12 @@ impl VgaBuffer {
             } else {
                 self.write_byte_to_buffer(byte);
                 self.col += 1;
+            }
+
+            // Move to newline when we're about to go out of the screen
+            if self.col == SCREEN_WIDTH {
+                self.row += 1;
+                self.col = 0;
             }
         }
     }
