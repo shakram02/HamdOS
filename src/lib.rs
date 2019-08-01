@@ -27,6 +27,8 @@ pub extern "C" fn _start() -> ! {
     for i in 0..14 {
         println!("{}", i);
     }
+
+    panic!("Some panic message");
     // Go to a terminal state
     unsafe {
         asm!("cli");
@@ -38,5 +40,9 @@ pub extern "C" fn _start() -> ! {
 /// This function is called on panic.
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+    println!("{}", _info);
+    unsafe {
+        asm!("cli");
+        asm!("hlt");
+    }
 }
