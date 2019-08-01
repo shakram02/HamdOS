@@ -4,6 +4,12 @@ const SCREEN_HEIGHT: usize = 25;
 const BACKSPACE: u8 = 8;
 const LINE_FEED: u8 = 10;
 use core::fmt;
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+lazy_static! {
+    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer { row: 0, col: 0 });
+}
 
 pub struct VgaBuffer {
     row: usize,
@@ -47,20 +53,8 @@ pub enum Color {
 }
 
 impl VgaBuffer {
-    pub fn new() -> VgaBuffer {
-        VgaBuffer { row: 0, col: 0 }
-    }
     pub fn clear_screen(&mut self) {
-        for i in 0..SCREEN_HEIGHT {
-            for j in 0..SCREEN_WIDTH {
-                self.write_byte_to_buffer_at(0x00, i as usize, j as usize);
-                self.write_attribute_to_buffer_at(
-                    ScreenCharAttr::new(Color::Black, Color::Black),
-                    i as usize,
-                    j as usize,
-                );
-            }
-        }
+        self.clear_rect(0, SCREEN_HEIGHT, 0, SCREEN_WIDTH);
     }
 
     pub fn apply_text_attr(&mut self, text_attr: ScreenCharAttr) {
@@ -88,6 +82,17 @@ impl VgaBuffer {
     }
 
     pub fn print_byte(&mut self, byte: u8) {
+        // Move to newline when we're about to go out of the screen
+        if self.col == SCREEN_WIDTH {
+            self.row += 1;
+            self.col = 0;
+        }
+
+        if self.row == SCREEN_HEIGHT {
+            self.row -= 1;
+            self.shift_one_row_up();
+        }
+
         if byte == LINE_FEED {
             self.row += 1;
             self.col = 0;
@@ -101,12 +106,6 @@ impl VgaBuffer {
         } else {
             self.write_byte_to_buffer(0xfe);
             self.col += 1;
-        }
-
-        // Move to newline when we're about to go out of the screen
-        if self.col == SCREEN_WIDTH {
-            self.row += 1;
-            self.col = 0;
         }
     }
 
@@ -131,6 +130,27 @@ impl VgaBuffer {
             *(addr as *mut u8) = attr.val;
         }
     }
+
+    fn shift_one_row_up(&mut self) {
+        self.clear_rect(0, 1, 0, SCREEN_WIDTH);
+        let addr = buffer_address_for(0, 0);
+
+        unsafe {
+            // Double screen width because each char has text & attribute
+            let row_vals = &mut *(addr as *mut [[u8; 2 * SCREEN_WIDTH]; SCREEN_HEIGHT]);
+            for i in 0..(SCREEN_HEIGHT - 1) {
+                row_vals[i] = row_vals[i + 1];
+            }
+        }
+    }
+
+    pub fn clear_rect(&mut self, start_row: usize, rows: usize, start_col: usize, cols: usize) {
+        for i in start_row..rows {
+            for j in start_col..cols {
+                self.write_byte_to_buffer_at(0x00, i as usize, j as usize);
+            }
+        }
+    }
 }
 
 impl fmt::Write for VgaBuffer {
@@ -146,4 +166,21 @@ fn buffer_address_for(row: usize, col: usize) -> usize {
 
 fn is_printable(byte: u8) -> bool {
     byte >= 0x20 && byte <= 0x7e
+}
+
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    VGA_WRITER.lock().write_fmt(args).unwrap();
+}
+
+#[macro_export]
+macro_rules! print {
+	($($arg:tt)*) => {$crate::vga_driver::_print(format_args!($($arg)*))	};
+}
+
+#[macro_export]
+macro_rules! println {
+	() => (print!("\n"));
+	($($arg:tt)*) => {$crate::print!("{}\n",format_args!($($arg)*))};
 }
