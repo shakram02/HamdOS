@@ -1,3 +1,5 @@
+
+
 default: build
 		
 build: target/kernel.bin
@@ -13,7 +15,7 @@ target/boot.o: src/asm/boot.asm
 		nasm -f elf64 src/asm/boot.asm -o target/boot.o
 
 target/kernel.bin: target/multiboot_header.o target/boot.o src/asm/linker.ld cargo
-		ld -zmax-page-size=0x1000 -o target/kernel.bin -T src/asm/linker.ld target/multiboot_header.o target/boot.o target/x86_64-target/release/ham_dos
+		ld -zmax-page-size=0x1000 -o target/kernel.bin -T src/asm/linker.ld target/multiboot_header.o target/boot.o target/x86_64-target/debug/libham_dos.a
 
 target/os.iso: target/kernel.bin src/asm/grub.cfg
 		mkdir -p target/isofiles/boot/grub
@@ -22,10 +24,10 @@ target/os.iso: target/kernel.bin src/asm/grub.cfg
 		grub-mkrescue -o target/os.iso target/isofiles
 
 cargo:
-	xargo build --release --target x86_64-target
+	@RUST_TARGET_PATH=$(shell pwd) xargo build --target x86_64-target
 
 run: target/os.iso
-		qemu-system-x86_64 -cdrom target/os.iso
+		qemu-system-x86_64 -cdrom target/os.iso -gdb tcp::26000 #-S
 
 clean: 
 		cargo clean
