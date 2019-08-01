@@ -1,5 +1,9 @@
 #![feature(asm)]
 #![no_std]
+#![no_main]
+#![feature(custom_test_frameworks)]
+#![test_runner(crate::test_runner)]
+#![reexport_test_harness_main = "test_main"]
 
 mod vga_driver;
 
@@ -28,13 +32,18 @@ pub extern "C" fn _start() -> ! {
         println!("{}", i);
     }
 
-    panic!("Some panic message");
+	// The custom test frameworks feature generates a main function that 
+	// calls test_runner, but this function is ignored because we use 
+	// the #[no_main] attribute and provide our own entry point.
+	#[cfg(test)]
+	test_main();	// Generated
+
     // Go to a terminal state
     unsafe {
         asm!("cli");
         asm!("hlt");
-    }
-    panic!("END");
+	};
+	panic!("END");
 }
 
 /// This function is called on panic.
@@ -45,4 +54,21 @@ fn panic(_info: &PanicInfo) -> ! {
         asm!("cli");
         asm!("hlt");
     }
+	
+	loop{}
+}
+
+#[cfg(test)]
+fn test_runner(tests: &[&dyn Fn()]) {
+    println!("Running {} tests", tests.len());
+    for test in tests {
+        test();
+    }
+}
+
+#[test_case]
+fn trivial_assertion() {
+    print!("trivial assertion... ");
+    assert_eq!(1, 1);
+    println!("[ok]");
 }
