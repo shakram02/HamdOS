@@ -5,6 +5,7 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+mod serial;
 mod vga_driver;
 
 use core::fmt::Write;
@@ -32,43 +33,72 @@ pub extern "C" fn _start() -> ! {
         println!("{}", i);
     }
 
-	// The custom test frameworks feature generates a main function that 
-	// calls test_runner, but this function is ignored because we use 
-	// the #[no_main] attribute and provide our own entry point.
-	#[cfg(test)]
-	test_main();	// Generated
+    // The custom test frameworks feature generates a main function that
+    // calls test_runner, but this function is ignored because we use
+    // the #[no_main] attribute and provide our own entry point.
+    #[cfg(test)]
+    test_main(); // Generated
 
     // Go to a terminal state
     unsafe {
         asm!("cli");
         asm!("hlt");
-	};
-	panic!("END");
+    };
+    panic!("END");
 }
 
 /// This function is called on panic.
+#[cfg(not(test))]
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    println!("{}", _info);
+fn panic(info: &PanicInfo) -> ! {
+    println!("{}", info);
+
     unsafe {
-        asm!("cli");
         asm!("hlt");
     }
-	
-	loop{}
+    loop {}
+}
+
+#[cfg(test)]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    serial_println!("[failed]\n");
+    serial_println!("Error: {}\n", info);
+    exit_qemu(QemuExitCode::Failed);
+
+    unsafe { asm!("hlt") }
+    loop {}
 }
 
 #[cfg(test)]
 fn test_runner(tests: &[&dyn Fn()]) {
-    println!("Running {} tests", tests.len());
+    serial_println!("Running {} tests", tests.len());
     for test in tests {
         test();
     }
+
+    exit_qemu(QemuExitCode::Success);
 }
 
 #[test_case]
 fn trivial_assertion() {
-    print!("trivial assertion... ");
+    serial_print!("trivial assertion... ");
     assert_eq!(1, 1);
-    println!("[ok]");
+    serial_println!("[ok]");
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum QemuExitCode {
+    Success = 0x10,
+    Failed = 0x11,
+}
+
+pub fn exit_qemu(exit_code: QemuExitCode) {
+    use x86_64::instructions::port::Port;
+
+    unsafe {
+        let mut port = Port::new(0xf4); // Defined in .cargo/config
+        port.write(exit_code as u32);
+    }
 }
