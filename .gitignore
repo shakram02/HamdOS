@@ -2,7 +2,7 @@
 *.iso
 *.bin
 isofiles/
-
+.idea/
 
 #Added by cargo
 #
