@@ -6,11 +6,7 @@
 #![feature(asm)]
 
 use core::panic::PanicInfo;
-<<<<<<< HEAD
 use ham_dos::{println, serial_print, serial_println};
-=======
-use ham_dos::{serial_print,serial_println,println};
->>>>>>> not using makefile anymore, use cargo xrun instead
 
 #[no_mangle] // don't mangle the name of this function
 pub extern "C" fn _start() -> ! {
