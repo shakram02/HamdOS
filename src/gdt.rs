@@ -49,7 +49,7 @@ pub fn init() {
 
     GDT.0.load();
     unsafe {
-		// Set CS because we just changed the GDT
+        // Set CS because we just changed the GDT
         set_cs(GDT.1.code_selector);
         load_tss(GDT.1.tss_selector);
     }
