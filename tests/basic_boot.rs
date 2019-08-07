@@ -6,7 +6,7 @@
 #![feature(asm)]
 
 use core::panic::PanicInfo;
-use ham_dos::{serial_print,serial_println,println};
+use ham_dos::{println, serial_print, serial_println};
 
 #[no_mangle] // don't mangle the name of this function
 pub extern "C" fn _start() -> ! {
