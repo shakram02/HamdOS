@@ -8,13 +8,17 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 
 lazy_static! {
-    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer { row: 0, col: 0, all_screen_attr:ScreenCharAttr{val:0} });
+    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer {
+        row: 0,
+        col: 0,
+        all_screen_attr: ScreenCharAttr { val: 0 }
+    });
 }
 
 pub struct VgaBuffer {
     row: usize,
     col: usize,
-	all_screen_attr: ScreenCharAttr
+    all_screen_attr: ScreenCharAttr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +59,10 @@ pub enum Color {
 
 impl VgaBuffer {
     pub fn clear_screen(&mut self) {
-        self.clear_rect(0, SCREEN_HEIGHT, 0, SCREEN_WIDTH);
+        unsafe {
+			let addr = &mut *(VGA_BUFFER_ADDR as *mut [[u16;SCREEN_WIDTH];SCREEN_HEIGHT]);
+			*addr = [[0;SCREEN_WIDTH];SCREEN_HEIGHT]
+		}
     }
 
     pub fn apply_text_attr(&mut self, text_attr: ScreenCharAttr) {
@@ -144,15 +151,15 @@ impl VgaBuffer {
             for i in 0..(SCREEN_HEIGHT - 1) {
                 row_vals[i] = row_vals[i + 1];
             }
-			self.clear_rect(SCREEN_HEIGHT-1, 1, 0, SCREEN_WIDTH);
+            self.clear_rect(SCREEN_HEIGHT - 1, 1, 0, SCREEN_WIDTH);
         }
     }
 
     pub fn clear_rect(&mut self, start_row: usize, rows: usize, start_col: usize, cols: usize) {
-        for i in start_row..(start_row+rows) {
-            for j in start_col..(start_col+cols) {
-                self.write_byte_to_buffer_at(0x00, i , j) ;
-				self.write_attribute_to_buffer_at(self.all_screen_attr, i, j);
+        for i in start_row..(start_row + rows) {
+            for j in start_col..(start_col + cols) {
+                self.write_byte_to_buffer_at(0x00, i, j);
+                self.write_attribute_to_buffer_at(self.all_screen_attr, i, j);
             }
         }
     }
