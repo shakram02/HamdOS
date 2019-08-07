@@ -8,14 +8,15 @@
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use ham_dos::vga_driver::{Color, ScreenCharAttr, VGA_WRITER};
-use ham_dos::{print, println};
 #[cfg(test)]
-use ham_dos::{serial_print, serial_println};
+use ham_dos::{exit_qemu, init, serial_println, QemuExitCode};
+use ham_dos::{print, println};
 
 static HELLO: &str = "Computer Vision has become ubiquitous in our society, with applications in\n> search\n> image understanding\n> apps\n> mapping\n> drones, and self-driving cars.\n\nCore to many of these applications are visual recognition tasks such as image classification, localization and detection. Recent developments in neural network (aka “deep learning”) approaches have greatly advanced the performance of these state-of-the-art visual recognition systems. This course is a deep dive into details of the deep learning architectures with a focus on lear@3\x08\x08ning. Wörölö";
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    ham_dos::init();
     VGA_WRITER.lock().clear_screen();
 
     VGA_WRITER
@@ -48,6 +49,7 @@ pub extern "C" fn _start() -> ! {
 }
 
 /// This function is called on panic.
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
@@ -55,5 +57,15 @@ fn panic(info: &PanicInfo) -> ! {
     unsafe {
         asm!("hlt");
     }
+    loop {}
+}
+
+// our panic handler in test mode
+#[cfg(test)]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    serial_println!("[failed]\n");
+    serial_println!("Error: {}\n", info);
+    exit_qemu(QemuExitCode::Failed);
     loop {}
 }
