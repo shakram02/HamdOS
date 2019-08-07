@@ -8,12 +8,13 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 
 lazy_static! {
-    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer { row: 0, col: 0 });
+    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer { row: 0, col: 0, all_screen_attr:ScreenCharAttr{val:0} });
 }
 
 pub struct VgaBuffer {
     row: usize,
     col: usize,
+	all_screen_attr: ScreenCharAttr
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +64,8 @@ impl VgaBuffer {
                 self.write_attribute_to_buffer_at(text_attr, i, j);
             }
         }
+
+		self.all_screen_attr = text_attr;
     }
 
     pub fn print(&mut self, bytes: &[u8]) {
@@ -141,13 +144,15 @@ impl VgaBuffer {
             for i in 0..(SCREEN_HEIGHT - 1) {
                 row_vals[i] = row_vals[i + 1];
             }
+			self.clear_rect(SCREEN_HEIGHT-1, 1, 0, SCREEN_WIDTH);
         }
     }
 
     pub fn clear_rect(&mut self, start_row: usize, rows: usize, start_col: usize, cols: usize) {
-        for i in start_row..rows {
-            for j in start_col..cols {
-                self.write_byte_to_buffer_at(0x00, i as usize, j as usize);
+        for i in start_row..(start_row+rows) {
+            for j in start_col..(start_col+cols) {
+                self.write_byte_to_buffer_at(0x00, i , j) ;
+				self.write_attribute_to_buffer_at(self.all_screen_attr, i, j);
             }
         }
     }
