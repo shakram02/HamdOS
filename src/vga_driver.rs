@@ -1,19 +1,28 @@
-const VGA_BUFFER_ADDR: usize = 0xB8000; // VGA buffer address
+use core::fmt;
+
+use spin::Mutex;
+
+use lazy_static::lazy_static;
+
+const VGA_BUFFER_ADDR: usize = 0xB8000;
+const DEFAULT_TEXT_ATTR: u8 = 0x07;
+// VGA buffer address
 const SCREEN_WIDTH: usize = 80;
 const SCREEN_HEIGHT: usize = 25;
 const BACKSPACE: u8 = 8;
 const LINE_FEED: u8 = 10;
-use core::fmt;
-use lazy_static::lazy_static;
-use spin::Mutex;
-
 lazy_static! {
-    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer { row: 0, col: 0 });
+    pub static ref VGA_WRITER: Mutex<VgaBuffer> = Mutex::new(VgaBuffer {
+        row: 0,
+        col: 0,
+        all_screen_attr: ScreenCharAttr { val: DEFAULT_TEXT_ATTR }   // Default light grey
+    });
 }
 
 pub struct VgaBuffer {
     row: usize,
     col: usize,
+    all_screen_attr: ScreenCharAttr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,15 +62,29 @@ pub enum Color {
 }
 
 impl VgaBuffer {
+    /// Clears the screen content and applies the default text attribute
+    /// which is Light Grey text on Black background
     pub fn clear_screen(&mut self) {
-        self.clear_rect(0, SCREEN_HEIGHT, 0, SCREEN_WIDTH);
+        unsafe {
+            let addr = &mut *(VGA_BUFFER_ADDR as *mut [[u16; SCREEN_WIDTH]; SCREEN_HEIGHT]);
+            *addr = [[((self.all_screen_attr.val as u16) << 8) as u16; SCREEN_WIDTH]; SCREEN_HEIGHT] // This is the default value [LightGray]
+        }
     }
 
-    pub fn apply_text_attr(&mut self, text_attr: ScreenCharAttr) {
-        for i in 0..SCREEN_HEIGHT {
-            for j in 0..SCREEN_WIDTH {
-                self.write_attribute_to_buffer_at(text_attr, i, j);
-            }
+    /// Clears the text on the screen and applies the given text attribute
+    pub fn clear_text_and_apply_attr(&mut self, text_attr: ScreenCharAttr) {
+        // Interpret the VGA buffer as u16 to be able to do batch copy,
+        // The structure of each VGA block is as follows (little endian)
+        // The addresses of x86 grow from bottom to top
+        // 0-7 	    ASCII code point (far right)
+        // 8-11 	Foreground color
+        // 12-14 	Background color
+        // 15 	    Blink (left)
+        // That's why each ScreenCharAttr value is shifted left 8 bits
+        self.all_screen_attr = text_attr;
+        unsafe {
+            let addr = &mut *((VGA_BUFFER_ADDR) as *mut [[u16; SCREEN_WIDTH]; SCREEN_HEIGHT]);
+            *addr = [[((self.all_screen_attr.val as u16) << 8) as u16; SCREEN_WIDTH]; SCREEN_HEIGHT];
         }
     }
 
@@ -125,6 +148,7 @@ impl VgaBuffer {
     }
 
     fn write_attribute_to_buffer_at(&self, attr: ScreenCharAttr, row: usize, col: usize) {
+        // The addresses of x86 grow from bottom to top, the text was the previous address
         let addr = buffer_address_for(row, col) + 1;
         unsafe {
             *(addr as *mut u8) = attr.val;
@@ -141,13 +165,19 @@ impl VgaBuffer {
             for i in 0..(SCREEN_HEIGHT - 1) {
                 row_vals[i] = row_vals[i + 1];
             }
+
+            // The last line should be cleared before writing anything to it
+            // since we don't move the row variable when writing at the final line
+            // TODO: save the passed away screen buffer to somewhere
+            self.clear_rect(SCREEN_HEIGHT - 1, 1, 0, SCREEN_WIDTH);
         }
     }
 
     pub fn clear_rect(&mut self, start_row: usize, rows: usize, start_col: usize, cols: usize) {
-        for i in start_row..rows {
-            for j in start_col..cols {
-                self.write_byte_to_buffer_at(0x00, i as usize, j as usize);
+        for i in start_row..(start_row + rows) {
+            for j in start_col..(start_col + cols) {
+                self.write_byte_to_buffer_at(0x00, i, j);
+                self.write_attribute_to_buffer_at(self.all_screen_attr, i, j);
             }
         }
     }
@@ -161,7 +191,8 @@ impl fmt::Write for VgaBuffer {
 }
 
 fn buffer_address_for(row: usize, col: usize) -> usize {
-    VGA_BUFFER_ADDR + ((row * (2 * SCREEN_WIDTH)) + (2 * col))
+    let row_byte_count = 2 * SCREEN_WIDTH;
+    VGA_BUFFER_ADDR + ((row * row_byte_count) + (2 * col))
 }
 
 fn is_printable(byte: u8) -> bool {
