@@ -20,6 +20,8 @@ lazy_static! {
 
             idt[InterruptIndex::Timer.as_usize()]
                 .set_handler_fn(timer_interrupt_handler);
+            idt[InterruptIndex::Keyboard.as_usize()]
+                .set_handler_fn(keyboard_interrupt_handler);
         }
 
         idt
@@ -51,6 +53,7 @@ pub static PICS: spin::Mutex<ChainedPics> = spin::Mutex::new(unsafe { ChainedPic
 #[repr(u8)]
 enum InterruptIndex {
     Timer = PIC_1_OFFSET,
+    Keyboard,
 }
 
 impl InterruptIndex {
@@ -67,5 +70,33 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptSt
     print!(".");
     unsafe {
         PICS.lock().notify_end_of_interrupt(Timer.as_u8());
+    }
+}
+
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
+    use x86_64::instructions::port::Port;
+    use spin::Mutex;
+    use pc_keyboard::{Keyboard, layouts, ScancodeSet1, DecodedKey};
+
+    lazy_static! {
+        static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = Mutex::new(Keyboard::new(layouts::Us104Key, ScancodeSet1));
+    }
+
+    let keyboard: &mut Keyboard<layouts::Us104Key, ScancodeSet1> = &mut KEYBOARD.lock();
+    let mut keyboard_port = Port::new(0x60);
+    let scan_code = unsafe { keyboard_port.read() };
+
+    if let Ok(Some(key_event)) = keyboard.add_byte(scan_code) {
+        if let Some(key) = keyboard.process_keyevent(key_event) {
+            match key {
+                DecodedKey::Unicode(character) => print!("{}", character),
+                DecodedKey::RawKey(key) => print!("{:?}", key),
+            }
+        }
+    }
+
+    unsafe {
+        let pics: &mut ChainedPics = &mut PICS.lock();  // Just for auto complete
+        pics.notify_end_of_interrupt(Timer.as_u8());
     }
 }
