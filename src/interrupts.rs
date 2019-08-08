@@ -83,6 +83,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut Interrup
     }
 
     let keyboard: &mut Keyboard<layouts::Us104Key, ScancodeSet1> = &mut KEYBOARD.lock();
+    // Data port of PS/2 controller https://wiki.osdev.org/%228042%22_PS/2_Controller
     let mut keyboard_port = Port::new(0x60);
     let scan_code = unsafe { keyboard_port.read() };
 

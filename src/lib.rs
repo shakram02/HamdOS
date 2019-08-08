@@ -12,11 +12,13 @@ pub mod gdt;
 pub mod interrupts;
 pub mod serial;
 pub mod vga_driver;
+pub mod ps2;
 
 pub fn init() {
     gdt::init();
     interrupts::init_idt();
     unsafe { interrupts::PICS.lock().initialize() };
+    ps2::init();
     x86_64::instructions::interrupts::enable();
 }
 
