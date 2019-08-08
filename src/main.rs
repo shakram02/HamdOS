@@ -28,7 +28,7 @@ pub extern "C" fn _start() -> ! {
     write!(VGA_WRITER.lock(), "Formats! {}", 4).unwrap();
     println!();
     println!("Hello {} {}", "!", 3);
-    for i in 0..14 {
+    for i in 0..18 {
         println!("{}", i);
     }
 
@@ -39,11 +39,7 @@ pub extern "C" fn _start() -> ! {
         test_main(); // Generated
 
     // Go to a terminal state
-    unsafe {
-        asm!("cli");
-        asm!("hlt");
-    };
-    panic!("END");
+    ham_dos::hlt_loop();
 }
 
 /// This function is called on panic.
@@ -51,11 +47,7 @@ pub extern "C" fn _start() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
-
-    unsafe {
-        asm!("hlt");
-    }
-    loop {}
+    ham_dos::hlt_loop();
 }
 
 // our panic handler in test mode

@@ -6,16 +6,18 @@
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
+use core::panic::PanicInfo;
+
 pub mod gdt;
 pub mod interrupts;
 pub mod serial;
 pub mod vga_driver;
 
-use core::panic::PanicInfo;
-
 pub fn init() {
     gdt::init();
     interrupts::init_idt();
+    unsafe { interrupts::PICS.lock().initialize() };
+    x86_64::instructions::interrupts::enable();
 }
 
 pub fn test_runner(tests: &[&dyn Fn()]) {
@@ -31,8 +33,7 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     serial_println!("Error: {}\n", info);
     exit_qemu(QemuExitCode::Failed);
 
-    unsafe { asm!("hlt") }
-    loop {}
+    hlt_loop();
 }
 
 #[cfg(test)]
@@ -63,8 +64,11 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 pub extern "C" fn _start() -> ! {
     test_main();
 
-    unsafe {
-        asm!("hlt");
+    hlt_loop();
+}
+
+pub fn hlt_loop() -> ! {
+    loop {
+        x86_64::instructions::hlt();
     }
-    loop {}
 }
