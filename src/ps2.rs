@@ -1,9 +1,10 @@
+#[allow(dead_code)]
 use spin::Mutex;
 use x86_64::instructions::port::Port;
 
 use lazy_static::lazy_static;
 
-use crate::print;
+use crate::println;
 
 const CMD_READ_CONFIG_BYTE: u8 = 0x20;
 const CMD_WRITE_CONFIG_BYTE: u8 = 0x60;
@@ -14,11 +15,16 @@ const CMD_DISABLE_SECOND_PORT: u8 = 0xA7;
 const CMD_TEST_PS2_CONTROLLER: u8 = 0xAA;
 const CMD_TEST_PS2_FIRST_PORT: u8 = 0xAB;
 const CMD_TEST_PS2_SECOND_PORT: u8 = 0xA9;
-const CMD_DISABLE_SCANNING: u8 = 0xF5;
+const DEVICE_CMD_DISABLE_SCANNING: u8 = 0xF5;
+const DEVICE_CMD_IDENTIFY: u8 = 0xF2;
+const CMD_SEND_TO_SECOND_PORT_INPUT_BUFFER: u8 = 0xD4;
+// Sends an input to second devices
 const PORT_NO_COMMAND: u16 = 0x64;
 const PORT_NO_DATA: u16 = 0x60;
 const REPLY_CONTROLLER_TEST_PASS: u8 = 0x55;
 const REPLY_DEVICE_ACK: u8 = 0xFA;
+const REPLY_DEVICE_RESEND: u8 = 0xFE;
+
 
 lazy_static! {
     static ref PS2: Mutex<Ps2Controller> = Mutex::new(Ps2Controller::new());
@@ -34,19 +40,45 @@ pub fn init() {
     controller.perform_self_test();
     controller.perform_interface_tests();
     controller.enable_devices_and_translation();
-    controller.enable_irqs();
+//    controller.enable_irqs();
+
+    println!("P1: {:#?}", controller.identify_port_device(Ps2Port::One));
+
+    if controller.is_dual_channel {
+        println!("P2: {:#?}", controller.identify_port_device(Ps2Port::Two));
+    }
 }
 
-enum CommandDestination {
-    Device,
-    Controller,
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum Ps2Port {
+    One,
+    Two,
 }
 
+#[derive(Debug, Copy, Clone)]
+enum AckType {
+    Resend,
+    Ok,
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(u8)]
+enum DeviceType {
+    Ps2Mouse = 0x00,
+    MouseScrollWheel = 0x03,
+    FiveButtonMouse = 0x04,
+    MF2KeyboardWithTranslation = 0x41,
+    MF2KeyboardWithTranslationDup = 0xC1,
+    MFKeyboard = 0x83,
+}
+
+#[derive(Debug)]
 struct Ps2Controller {
     command_port: Port<u8>,
     data_port: Port<u8>,
     is_dual_channel: bool,
 }
+
 
 impl Ps2Controller {
     pub const fn new() -> Ps2Controller {
@@ -71,12 +103,6 @@ impl Ps2Controller {
 
     fn can_write_data(&mut self) -> bool {
         (self.read_status() & 0x1 << 1) != 0
-    }
-
-    fn get_write_destination(&mut self) -> CommandDestination {
-        if (self.read_status() & 0x1 << 3) != 0 {
-            CommandDestination::Controller
-        } else { CommandDestination::Device }
     }
 
     /// Disables interrupt for all devices and clears translation
@@ -150,8 +176,69 @@ impl Ps2Controller {
 
         self.write_command(CMD_TEST_PS2_SECOND_PORT);
         let response = self.read_data();
-        if response!= 0 {
+        if response != 0 {
             panic!("Second PS/2 device failed")
+        }
+    }
+
+    fn write_to_port_one_device(&mut self, cmd: u8) {
+        self.write_data(cmd);
+    }
+
+    fn write_to_port_two_device(&mut self, cmd: u8) {
+        self.write_command(CMD_SEND_TO_SECOND_PORT_INPUT_BUFFER);
+        self.write_data(cmd)
+    }
+
+    fn identify_port_device(&mut self, port: Ps2Port) -> DeviceType {
+        fn send_func(controller: &mut Ps2Controller, port: Ps2Port, cmd: u8) {
+            if port == Ps2Port::Two {
+                controller.write_to_port_two_device(cmd)
+            } else {
+                controller.write_to_port_one_device(cmd)
+            };
+        }
+
+        // Send ->
+        // ACK <-
+        // Response <-
+        send_func(self, port, DEVICE_CMD_IDENTIFY);
+        loop {
+            match self.read_ack() {
+                AckType::Resend => {
+                    send_func(self, port, DEVICE_CMD_IDENTIFY);
+                }
+                AckType::Ok => break,
+            }
+        }
+
+        // Now the type is ready to be read
+        let mut response = self.read_data();
+        if response == (0xAB as u8)
+        {
+            // 2-byte response
+            response = self.read_data();
+        }
+
+        match response {
+            0x00 => DeviceType::Ps2Mouse,
+            0x03 => DeviceType::MouseScrollWheel,
+            0x04 => DeviceType::FiveButtonMouse,
+            0x41 => DeviceType::MF2KeyboardWithTranslation,
+            0xC1 => DeviceType::MF2KeyboardWithTranslationDup,
+            0x83 => DeviceType::MFKeyboard,
+            _ => panic!("Undefined device type: {}", response)
+        }
+    }
+
+    fn read_ack(&mut self) -> AckType {
+        let response = self.read_data();
+        if response == REPLY_DEVICE_RESEND {
+            AckType::Resend
+        } else if response == REPLY_DEVICE_ACK {
+            AckType::Ok
+        } else {
+            panic!("Device didn't send an ACK [{:X}]", response)
         }
     }
 
@@ -167,27 +254,35 @@ impl Ps2Controller {
 
     fn write_command(&mut self, cmd: u8) {
         self.wait_till_input_buffer_empty();
-        self.write_direct(cmd)
+        self.write_command_direct(cmd)
     }
 
     fn read_status(&mut self) -> u8 {
         self.wait_till_out_buffer_full();
-        self.read_direct()
+        self.read_status_register_direct()
     }
 
     fn wait_till_out_buffer_full(&mut self) {
-        while (self.read_direct() & 0x1) == 0 {}
+        while self.check_output_buffer_full() {}
     }
 
     fn wait_till_input_buffer_empty(&mut self) {
-        while (self.read_direct() & 0x1 << 1) != 0 {}
+        while self.check_input_buffer_empty() {}
     }
 
-    fn read_direct(&mut self) -> u8 {
+    fn check_output_buffer_full(&mut self) -> bool {
+        (self.read_status_register_direct() & 0x1) == 0
+    }
+
+    fn check_input_buffer_empty(&mut self) -> bool {
+        (self.read_status_register_direct() & 0x1 << 1) != 0
+    }
+
+    fn read_status_register_direct(&mut self) -> u8 {
         unsafe { self.command_port.read() }
     }
 
-    fn write_direct(&mut self, cmd: u8) {
+    fn write_command_direct(&mut self, cmd: u8) {
         unsafe { self.command_port.write(cmd); }
     }
 
@@ -198,6 +293,10 @@ impl Ps2Controller {
 
     fn read_data(&mut self) -> u8 {
         self.wait_till_out_buffer_full();
+        self.read_data_direct()
+    }
+
+    fn read_data_direct(&mut self) -> u8 {
         unsafe { self.data_port.read() }
     }
 
