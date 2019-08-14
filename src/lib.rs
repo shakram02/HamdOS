@@ -13,6 +13,8 @@ pub mod interrupts;
 pub mod serial;
 pub mod vga_driver;
 pub mod ps2;
+pub mod mouse;
+pub mod misc;
 
 pub fn init() {
     gdt::init();

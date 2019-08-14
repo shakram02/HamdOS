@@ -1,3 +1,6 @@
+#![feature(custom_test_frameworks)]
+#![test_runner(ham_dos::test_runner)]
+
 #[allow(dead_code)]
 use spin::Mutex;
 use x86_64::instructions::port::Port;
@@ -16,6 +19,10 @@ const CMD_TEST_PS2_CONTROLLER: u8 = 0xAA;
 const CMD_TEST_PS2_FIRST_PORT: u8 = 0xAB;
 const CMD_TEST_PS2_SECOND_PORT: u8 = 0xA9;
 const DEVICE_CMD_DISABLE_SCANNING: u8 = 0xF5;
+const DEVICE_MOUSE_ENABLE_DATA_REPORTING: u8 = 0xF4;
+const DEVICE_MOUSE_SET_SAMPLE_RATE: u8 = 0xF3;
+const DEVICE_MOUSE_RESET: u8 = 0xFF;
+// https://wiki.osdev.org/PS/2_Mouse
 const DEVICE_CMD_IDENTIFY: u8 = 0xF2;
 const CMD_SEND_TO_SECOND_PORT_INPUT_BUFFER: u8 = 0xD4;
 // Sends an input to second devices
@@ -40,13 +47,26 @@ pub fn init() {
     controller.perform_self_test();
     controller.perform_interface_tests();
     controller.enable_devices_and_translation();
-//    controller.enable_irqs();
 
-    println!("P1: {:#?}", controller.identify_port_device(Ps2Port::One));
-
+    println!("Found PS/2 device [0]: {:#?}", controller.identify_port_device(Ps2Port::One));
     if controller.is_dual_channel {
-        println!("P2: {:#?}", controller.identify_port_device(Ps2Port::Two));
+        println!("Found PS/2 device [1]: {:#?}", controller.identify_port_device(Ps2Port::Two));
+//        controller.write_to_port_two_device()
+        controller.write_to_port_two_device(DEVICE_MOUSE_RESET);
+
+        // Enter scrolling wheel mode
+        for i in 0..2 {
+            controller.write_to_port_two_device(DEVICE_MOUSE_SET_SAMPLE_RATE);
+            controller.write_to_port_two_device(200);
+        }
+        controller.write_to_port_two_device(DEVICE_MOUSE_SET_SAMPLE_RATE);
+        controller.write_to_port_two_device(80);
+
+        controller.write_to_port_two_device(DEVICE_MOUSE_ENABLE_DATA_REPORTING);
+        controller.read_ack();
     }
+
+    controller.enable_irqs();
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

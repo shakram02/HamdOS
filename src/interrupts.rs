@@ -5,7 +5,8 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 use lazy_static::lazy_static;
 
 use crate::gdt;
-use crate::interrupts::InterruptIndex::Timer;
+use crate::interrupts::InterruptIndex::{Mouse, Timer};
+use crate::misc::Position;
 use crate::print;
 use crate::println;
 
@@ -22,6 +23,9 @@ lazy_static! {
                 .set_handler_fn(timer_interrupt_handler);
             idt[InterruptIndex::Keyboard.as_usize()]
                 .set_handler_fn(keyboard_interrupt_handler);
+
+            idt[InterruptIndex::Mouse.as_usize()]
+                .set_handler_fn(mouse_interrupt_handler);
         }
 
         idt
@@ -29,7 +33,6 @@ lazy_static! {
 }
 
 pub fn init_idt() {
-    println!("LOADING IDT");
     IDT.load();
 }
 
@@ -53,7 +56,8 @@ pub static PICS: spin::Mutex<ChainedPics> = spin::Mutex::new(unsafe { ChainedPic
 #[repr(u8)]
 enum InterruptIndex {
     Timer = PIC_1_OFFSET,
-    Keyboard,
+    Keyboard = PIC_1_OFFSET + 1,
+    Mouse = PIC_1_OFFSET + 12,
 }
 
 impl InterruptIndex {
@@ -67,7 +71,7 @@ impl InterruptIndex {
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
-    print!(".");
+//    print!(".");
     unsafe {
         PICS.lock().notify_end_of_interrupt(Timer.as_u8());
     }
@@ -98,6 +102,31 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut Interrup
 
     unsafe {
         let pics: &mut ChainedPics = &mut PICS.lock();  // Just for auto complete
-        pics.notify_end_of_interrupt(Timer.as_u8());
+        pics.notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
+    }
+}
+
+extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
+    use x86_64::instructions::port::Port;
+    use crate::mouse::{Mouse, MouseButtonState};
+    use spin::Mutex;
+    let mut mouse_port = Port::new(0x60);
+
+    lazy_static! {
+        static ref MOUSE: Mutex<Mouse> = Mutex::new(Mouse::new());
+    }
+
+    let mut packet = [0 as u8; 4];
+    for i in 0..4 {
+        let byte = unsafe { mouse_port.read() };
+        packet[i] = byte;
+    }
+
+    let mouse: &mut Mouse = &mut MOUSE.lock();
+    mouse.add_standard_packet(packet);
+    println!("{:?}" ,mouse.get_position());
+    unsafe {
+        let pics: &mut ChainedPics = &mut PICS.lock();  // Just for auto complete
+        pics.notify_end_of_interrupt(InterruptIndex::Mouse.as_u8());
     }
 }
