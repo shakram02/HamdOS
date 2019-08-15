@@ -1,3 +1,4 @@
+use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
 use x86_64::{PhysAddr, VirtAddr};
 use x86_64::structures::paging::{MappedPageTable, MapperAllSizes, PageTable, PhysFrame};
 use x86_64::structures::paging::{FrameAllocator, Mapper, Page, Size4KiB};
@@ -55,10 +56,48 @@ pub fn create_example_mapping(page: Page, mapper: &mut impl Mapper<Size4KiB>, fr
     map_to_result.expect("Failed to make page mapping").flush();
 }
 
-pub struct EmptyFrameAllocator;
+/// A FrameAllocator that returns usable frames from the bootloader's memory map.
+pub struct BootInfoFrameAllocator {
+    memory_map: &'static MemoryMap,
+    next: usize,
+}
 
-unsafe impl FrameAllocator<Size4KiB> for EmptyFrameAllocator {
+impl BootInfoFrameAllocator {
+    /// Create a FrameAllocator from the passed memory map.
+    ///
+    /// This function is unsafe because the caller must guarantee that the passed
+    /// memory map is valid. The main requirement is that all frames that are marked
+    /// as `USABLE` in it are really unused.
+    pub unsafe fn init(memory_map: &'static MemoryMap) -> Self {
+        BootInfoFrameAllocator {
+            memory_map,
+            next: 0,
+        }
+    }
+
+    /// Returns an iterator over the usable frames specified in the memory map.
+    fn usable_frames(&self) -> impl Iterator<Item=PhysFrame> {
+        let regions = self.memory_map.iter();
+        let usable = regions
+            .filter(|&x| x.region_type == MemoryRegionType::Usable);
+
+        let addresses = usable
+            .map(|x| x.range.start_addr()..x.range.end_addr());
+
+        // Page start (physical) addresses
+        let frame_addresses = addresses
+            .flat_map(|x| x.step_by(4096));
+
+        // create `PhysFrame` types from the start addresses
+        frame_addresses
+            .map(|addr| PhysFrame::containing_address(PhysAddr::new(addr)))
+    }
+}
+
+unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame> {
-        None
+        let frame = self.usable_frames().nth(self.next);
+        self.next += 1;
+        frame
     }
 }

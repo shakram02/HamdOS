@@ -29,7 +29,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     // new: initialize a mapper
     let mut mapper = unsafe { memory::init(boot_info.physical_memory_offset) };
-    let mut frame_allocator = memory::EmptyFrameAllocator;
+    let mut frame_allocator = unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
     // The create example mapping function maps the physical address 0xb8000 to the given
     // virtual address
