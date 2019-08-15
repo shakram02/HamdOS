@@ -24,38 +24,20 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
         .clear_text_and_apply_attr(ScreenCharAttr::new(Color::White, Color::Cyan));
     ham_dos::init();
 
-    use x86_64::registers::control::Cr3;
-    use ham_dos::memory::{active_level_4_page_table, translate_addr};
+    use ham_dos::memory;
+    use x86_64::structures::paging::{MapperAllSizes, Page};
 
-    let l4_table: &'static mut PageTable = unsafe {
-        active_level_4_page_table(boot_info.physical_memory_offset)
-    };
+    // new: initialize a mapper
+    let mut mapper = unsafe { memory::init(boot_info.physical_memory_offset) };
+    let mut frame_allocator = memory::EmptyFrameAllocator;
 
-    let addresses = [
-        // the identity-mapped vga buffer page
-        0xb8000,
-        // some code page
-        0x20010a,
-        // some stack page
-        0x57ac_001f_fe48,
-        // virtual address mapped to physical address 0
-        // The translation of the physical_memory_offset should point to physical address 0,
-        // but the translation fails because the mapping uses huge pages for efficiency.
-        // Future bootloader version might use the same optimization for kernel and stack pages.
-        boot_info.physical_memory_offset,
-    ];
+    // The create example mapping function maps the physical address 0xb8000 to the given
+    // virtual address
+    let page = Page::containing_address(VirtAddr::new(0x1000));
+    memory::create_example_mapping(page, &mut mapper, &mut frame_allocator);
 
-    for &address in &addresses {
-        let virt = VirtAddr::new(address);
-        let phys = unsafe { translate_addr(virt, boot_info.physical_memory_offset) };
-        println!("{:#?} -> {:#?}", virt, phys);
-    }
-
-    for (i, entry) in l4_table.iter().enumerate() {
-        if !entry.is_unused() {
-            println!("L4 Entry {}: {:?}", i, entry);
-        }
-    }
+    let page_ptr: *mut u64 = page.start_address().as_mut_ptr();
+    unsafe { page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e) };
 
     // The custom test frameworks feature generates a main function that
     // calls test_runner, but this function is ignored because we use
