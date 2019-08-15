@@ -7,13 +7,18 @@
 
 use core::panic::PanicInfo;
 
+use bootloader::{entry_point, BootInfo};
+use x86_64::structures::paging::PageTable;
+use x86_64::VirtAddr;
+
 use ham_dos::println;
 use ham_dos::vga_driver::{Color, ScreenCharAttr, VGA_WRITER};
 #[cfg(test)]
 use ham_dos::{exit_qemu, init, serial_println, QemuExitCode};
 
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+entry_point!(kernel_main);
+
+fn kernel_main(boot_info: &'static BootInfo) -> ! {
     VGA_WRITER
         .lock()
         .clear_text_and_apply_attr(ScreenCharAttr::new(Color::White, Color::Cyan));
