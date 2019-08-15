@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 spin = "0.5"
-bootloader = "0.6.4"
+bootloader = {version = "0.6.4", features = ["map_physical_memory"]}
 x86_64 = "0.7.0"
 uart_16550 = "0.2.0"
 pic8259_simple = "0.1.1"
