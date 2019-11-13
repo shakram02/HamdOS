@@ -9,7 +9,6 @@ pub struct MouseButtonState {
     middle_button_clicked: bool,
 }
 
-
 impl MouseButtonState {
     fn new() -> MouseButtonState {
         MouseButtonState {
@@ -83,19 +82,20 @@ impl Mouse {
     fn get_signed_value(packet_value: u8, state: u8, bit_index: u8) -> isize {
         let is_negative = (state & (1 << bit_index)) != 0;
         let value = packet_value as u16;
-        let mut ret: i16 = 0;
-        if is_negative {
-            ret = (256 - value) as i16;
-            ret *= -1;// Add the -ve
+
+        let ret: i16 = if is_negative {
+            let mut v = (256 - value) as i16;
+            v *= -1; // Add the -ve
+            v
         } else {
-            ret = value as i16;
-        }
+            value as i16
+        };
 
         return ret as isize;
     }
 
     fn get_z_value(packet_value: u8) -> isize {
-        let z_axis = (packet_value & 0x0F);
+        let z_axis = packet_value & 0x0F;
         if (z_axis & 0x8) != 0 {
             -1 * ((!z_axis + 1) & 0x0F) as isize
         } else {
@@ -115,4 +115,3 @@ fn test_buttons() {
     assert_eq!(m.get_button_state(), bs);
     serial_println!("Mouse buttons...[ok]");
 }
-

@@ -2,19 +2,22 @@
 #![cfg_attr(test, no_main)]
 #![feature(custom_test_frameworks)]
 #![feature(asm)]
+#![feature(alloc_error_handler)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
 use core::panic::PanicInfo;
+extern crate alloc;
 
 pub mod gdt;
 pub mod interrupts;
+pub mod memory;
+pub mod misc;
+pub mod mouse;
+pub mod ps2;
 pub mod serial;
 pub mod vga_driver;
-pub mod ps2;
-pub mod mouse;
-pub mod misc;
 
 pub fn init() {
     gdt::init();

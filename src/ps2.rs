@@ -1,7 +1,3 @@
-#![feature(custom_test_frameworks)]
-#![test_runner(ham_dos::test_runner)]
-
-#[allow(dead_code)]
 use spin::Mutex;
 use x86_64::instructions::port::Port;
 
@@ -18,6 +14,7 @@ const CMD_DISABLE_SECOND_PORT: u8 = 0xA7;
 const CMD_TEST_PS2_CONTROLLER: u8 = 0xAA;
 const CMD_TEST_PS2_FIRST_PORT: u8 = 0xAB;
 const CMD_TEST_PS2_SECOND_PORT: u8 = 0xA9;
+#[allow(dead_code)]
 const DEVICE_CMD_DISABLE_SCANNING: u8 = 0xF5;
 const DEVICE_MOUSE_ENABLE_DATA_REPORTING: u8 = 0xF4;
 const DEVICE_MOUSE_SET_SAMPLE_RATE: u8 = 0xF3;
@@ -31,7 +28,6 @@ const PORT_NO_DATA: u16 = 0x60;
 const REPLY_CONTROLLER_TEST_PASS: u8 = 0x55;
 const REPLY_DEVICE_ACK: u8 = 0xFA;
 const REPLY_DEVICE_RESEND: u8 = 0xFE;
-
 
 lazy_static! {
     static ref PS2: Mutex<Ps2Controller> = Mutex::new(Ps2Controller::new());
@@ -48,14 +44,20 @@ pub fn init() {
     controller.perform_interface_tests();
     controller.enable_devices_and_translation();
 
-    println!("Found PS/2 device [0]: {:#?}", controller.identify_port_device(Ps2Port::One));
+    println!(
+        "Found PS/2 device [0]: {:#?}",
+        controller.identify_port_device(Ps2Port::One)
+    );
     if controller.is_dual_channel {
-        println!("Found PS/2 device [1]: {:#?}", controller.identify_port_device(Ps2Port::Two));
-//        controller.write_to_port_two_device()
+        println!(
+            "Found PS/2 device [1]: {:#?}",
+            controller.identify_port_device(Ps2Port::Two)
+        );
+        //        controller.write_to_port_two_device()
         controller.write_to_port_two_device(DEVICE_MOUSE_RESET);
 
         // Enter scrolling wheel mode
-        for i in 0..2 {
+        for _ in 0..2 {
             controller.write_to_port_two_device(DEVICE_MOUSE_SET_SAMPLE_RATE);
             controller.write_to_port_two_device(200);
         }
@@ -99,7 +101,6 @@ struct Ps2Controller {
     is_dual_channel: bool,
 }
 
-
 impl Ps2Controller {
     pub const fn new() -> Ps2Controller {
         Ps2Controller {
@@ -115,14 +116,6 @@ impl Ps2Controller {
 
     fn disable_second_device(&mut self) {
         self.write_command(CMD_DISABLE_SECOND_PORT);
-    }
-
-    fn can_read_data(&mut self) -> bool {
-        (self.read_status() & 0x1) != 0
-    }
-
-    fn can_write_data(&mut self) -> bool {
-        (self.read_status() & 0x1 << 1) != 0
     }
 
     /// Disables interrupt for all devices and clears translation
@@ -160,9 +153,9 @@ impl Ps2Controller {
         let mut config = self.read_configuration_byte();
         // IRQs are on bits 0,1 and enable translation 6
         config |= if self.is_dual_channel {
-            0b00000011  // Enable First and Second ports
+            0b00000011 // Enable First and Second ports
         } else {
-            0b00000001  // Enable First port
+            0b00000001 // Enable First port
         };
 
         self.write_command(CMD_WRITE_CONFIG_BYTE);
@@ -192,7 +185,9 @@ impl Ps2Controller {
             panic!("First PS/2 device failed")
         }
 
-        if !self.is_dual_channel { return; }
+        if !self.is_dual_channel {
+            return;
+        }
 
         self.write_command(CMD_TEST_PS2_SECOND_PORT);
         let response = self.read_data();
@@ -234,8 +229,7 @@ impl Ps2Controller {
 
         // Now the type is ready to be read
         let mut response = self.read_data();
-        if response == (0xAB as u8)
-        {
+        if response == (0xAB as u8) {
             // 2-byte response
             response = self.read_data();
         }
@@ -247,7 +241,7 @@ impl Ps2Controller {
             0x41 => DeviceType::MF2KeyboardWithTranslation,
             0xC1 => DeviceType::MF2KeyboardWithTranslationDup,
             0x83 => DeviceType::MFKeyboard,
-            _ => panic!("Undefined device type: {}", response)
+            _ => panic!("Undefined device type: {}", response),
         }
     }
 
@@ -277,11 +271,6 @@ impl Ps2Controller {
         self.write_command_direct(cmd)
     }
 
-    fn read_status(&mut self) -> u8 {
-        self.wait_till_out_buffer_full();
-        self.read_status_register_direct()
-    }
-
     fn wait_till_out_buffer_full(&mut self) {
         while self.check_output_buffer_full() {}
     }
@@ -303,7 +292,9 @@ impl Ps2Controller {
     }
 
     fn write_command_direct(&mut self, cmd: u8) {
-        unsafe { self.command_port.write(cmd); }
+        unsafe {
+            self.command_port.write(cmd);
+        }
     }
 
     fn write_data(&mut self, data: u8) {

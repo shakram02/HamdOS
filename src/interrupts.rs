@@ -5,8 +5,7 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 use lazy_static::lazy_static;
 
 use crate::gdt;
-use crate::interrupts::InterruptIndex::{Mouse, Timer};
-use crate::misc::Position;
+use crate::interrupts::InterruptIndex::Timer;
 use crate::print;
 use crate::println;
 
@@ -19,13 +18,10 @@ lazy_static! {
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
 
-            idt[InterruptIndex::Timer.as_usize()]
-                .set_handler_fn(timer_interrupt_handler);
-            idt[InterruptIndex::Keyboard.as_usize()]
-                .set_handler_fn(keyboard_interrupt_handler);
+            idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer_interrupt_handler);
+            idt[InterruptIndex::Keyboard.as_usize()].set_handler_fn(keyboard_interrupt_handler);
 
-            idt[InterruptIndex::Mouse.as_usize()]
-                .set_handler_fn(mouse_interrupt_handler);
+            idt[InterruptIndex::Mouse.as_usize()].set_handler_fn(mouse_interrupt_handler);
         }
 
         idt
@@ -48,9 +44,10 @@ extern "x86-interrupt" fn double_fault_handler(stack_frame: &mut InterruptStackF
 // Interrupt controllers
 pub const PIC_1_OFFSET: u8 = 32;
 // First empty interrupt number
-pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;    // First empty interrupt number
+pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8; // First empty interrupt number
 
-pub static PICS: spin::Mutex<ChainedPics> = spin::Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
+pub static PICS: spin::Mutex<ChainedPics> =
+    spin::Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)]
@@ -71,19 +68,20 @@ impl InterruptIndex {
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
-//    print!(".");
+    //    print!(".");
     unsafe {
         PICS.lock().notify_end_of_interrupt(Timer.as_u8());
     }
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
-    use x86_64::instructions::port::Port;
+    use pc_keyboard::{layouts, DecodedKey, Keyboard, ScancodeSet1};
     use spin::Mutex;
-    use pc_keyboard::{Keyboard, layouts, ScancodeSet1, DecodedKey};
+    use x86_64::instructions::port::Port;
 
     lazy_static! {
-        static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = Mutex::new(Keyboard::new(layouts::Us104Key, ScancodeSet1));
+        static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> =
+            Mutex::new(Keyboard::new(layouts::Us104Key, ScancodeSet1));
     }
 
     let keyboard: &mut Keyboard<layouts::Us104Key, ScancodeSet1> = &mut KEYBOARD.lock();
@@ -101,15 +99,15 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut Interrup
     }
 
     unsafe {
-        let pics: &mut ChainedPics = &mut PICS.lock();  // Just for auto complete
+        let pics: &mut ChainedPics = &mut PICS.lock(); // Just for auto complete
         pics.notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
     }
 }
 
 extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
-    use x86_64::instructions::port::Port;
-    use crate::mouse::{Mouse, MouseButtonState};
+    use crate::mouse::Mouse;
     use spin::Mutex;
+    use x86_64::instructions::port::Port;
     let mut mouse_port = Port::new(0x60);
 
     lazy_static! {
@@ -124,9 +122,9 @@ extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: &mut InterruptSt
 
     let mouse: &mut Mouse = &mut MOUSE.lock();
     mouse.add_standard_packet(packet);
-    println!("{:?}" ,mouse.get_position());
+    println!("{:?}", mouse.get_position());
     unsafe {
-        let pics: &mut ChainedPics = &mut PICS.lock();  // Just for auto complete
+        let pics: &mut ChainedPics = &mut PICS.lock(); // Just for auto complete
         pics.notify_end_of_interrupt(InterruptIndex::Mouse.as_u8());
     }
 }

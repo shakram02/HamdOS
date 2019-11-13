@@ -67,7 +67,8 @@ impl VgaBuffer {
     pub fn clear_screen(&mut self) {
         unsafe {
             let addr = &mut *(VGA_BUFFER_ADDR as *mut [[u16; SCREEN_WIDTH]; SCREEN_HEIGHT]);
-            *addr = [[((self.all_screen_attr.val as u16) << 8) as u16; SCREEN_WIDTH]; SCREEN_HEIGHT] // This is the default value [LightGray]
+            *addr = [[((self.all_screen_attr.val as u16) << 8) as u16; SCREEN_WIDTH]; SCREEN_HEIGHT]
+            // This is the default value [LightGray]
         }
     }
 
@@ -84,7 +85,8 @@ impl VgaBuffer {
         self.all_screen_attr = text_attr;
         unsafe {
             let addr = &mut *((VGA_BUFFER_ADDR) as *mut [[u16; SCREEN_WIDTH]; SCREEN_HEIGHT]);
-            *addr = [[((self.all_screen_attr.val as u16) << 8) as u16; SCREEN_WIDTH]; SCREEN_HEIGHT];
+            *addr =
+                [[((self.all_screen_attr.val as u16) << 8) as u16; SCREEN_WIDTH]; SCREEN_HEIGHT];
         }
     }
 

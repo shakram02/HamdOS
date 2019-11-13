@@ -7,21 +7,23 @@
 
 use core::panic::PanicInfo;
 
-#[cfg(test)]
-use ham_dos::{exit_qemu, init, QemuExitCode, serial_println};
 use ham_dos::println;
 use ham_dos::vga_driver::{Color, ScreenCharAttr, VGA_WRITER};
+#[cfg(test)]
+use ham_dos::{exit_qemu, init, serial_println, QemuExitCode};
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    VGA_WRITER.lock().clear_text_and_apply_attr(ScreenCharAttr::new(Color::White, Color::Cyan));
+    VGA_WRITER
+        .lock()
+        .clear_text_and_apply_attr(ScreenCharAttr::new(Color::White, Color::Cyan));
     ham_dos::init();
 
     // The custom test frameworks feature generates a main function that
     // calls test_runner, but this function is ignored because we use
     // the #[no_main] attribute and provide our own entry point.
     #[cfg(test)]
-        test_main(); // Generated
+    test_main(); // Generated
 
     // Go to a terminal state
     ham_dos::hlt_loop();
