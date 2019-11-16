@@ -1,8 +1,7 @@
 use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
-use x86_64::{PhysAddr, VirtAddr};
-use x86_64::structures::paging::{MappedPageTable, MapperAllSizes, PageTable, PhysFrame};
 use x86_64::structures::paging::{FrameAllocator, Mapper, Page, Size4KiB};
-use x86_64::structures::paging::page_table::PageTableEntry;
+use x86_64::structures::paging::{MappedPageTable, MapperAllSizes, PageTable, PhysFrame};
+use x86_64::{PhysAddr, VirtAddr};
 
 /// Returns a mutable reference to the active level 4 table.
 ///
@@ -12,7 +11,7 @@ use x86_64::structures::paging::page_table::PageTableEntry;
 /// to avoid aliasing `&mut` references (which is undefined behavior).
 pub unsafe fn init(physical_memory_offset: u64) -> impl MapperAllSizes {
     let level_4_table = active_level_4_page_table(physical_memory_offset);
-    let phys_to_virtual = move |frame: PhysFrame| -> *mut PageTable{
+    let phys_to_virtual = move |frame: PhysFrame| -> *mut PageTable {
         let phys = frame.start_address().as_u64();
         let virt = VirtAddr::new(phys + physical_memory_offset);
         virt.as_mut_ptr()
@@ -45,14 +44,16 @@ unsafe fn active_level_4_page_table(physical_memory_offset: u64) -> &'static mut
     &mut *page_table_ptr
 }
 
-pub fn create_example_mapping(page: Page, mapper: &mut impl Mapper<Size4KiB>, frame_allocator: &mut impl FrameAllocator<Size4KiB>) {
+pub fn map_to_writable_page(
+    page: Page,
+    mapper: &mut impl Mapper<Size4KiB>,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+    phys_address: u64,
+) {
     use x86_64::structures::paging::PageTableFlags as Flags;
-    let frame = PhysFrame::containing_address(PhysAddr::new(0xb8000));
+    let frame = PhysFrame::containing_address(PhysAddr::new(phys_address));
     let flags = Flags::PRESENT | Flags::WRITABLE;
-    let map_to_result = unsafe {
-        mapper.map_to(page, frame, flags, frame_allocator)
-    };
-
+    let map_to_result = unsafe { mapper.map_to(page, frame, flags, frame_allocator) };
     map_to_result.expect("Failed to make page mapping").flush();
 }
 
@@ -76,21 +77,17 @@ impl BootInfoFrameAllocator {
     }
 
     /// Returns an iterator over the usable frames specified in the memory map.
-    fn usable_frames(&self) -> impl Iterator<Item=PhysFrame> {
+    fn usable_frames(&self) -> impl Iterator<Item = PhysFrame> {
         let regions = self.memory_map.iter();
-        let usable = regions
-            .filter(|&x| x.region_type == MemoryRegionType::Usable);
+        let usable = regions.filter(|&x| x.region_type == MemoryRegionType::Usable);
 
-        let addresses = usable
-            .map(|x| x.range.start_addr()..x.range.end_addr());
+        let addresses = usable.map(|x| x.range.start_addr()..x.range.end_addr());
 
         // Page start (physical) addresses
-        let frame_addresses = addresses
-            .flat_map(|x| x.step_by(4096));
+        let frame_addresses = addresses.flat_map(|x| x.step_by(4096));
 
         // create `PhysFrame` types from the start addresses
-        frame_addresses
-            .map(|addr| PhysFrame::containing_address(PhysAddr::new(addr)))
+        frame_addresses.map(|addr| PhysFrame::containing_address(PhysAddr::new(addr)))
     }
 }
 
